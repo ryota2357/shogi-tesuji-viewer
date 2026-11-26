@@ -1,24 +1,25 @@
-// ○ / × の記録などを localStorage に保存する。
+// Persists the user's marks and preferences in localStorage.
 
-/** ok: ○, ng: × （意味は使う人の気分でよい） */
+/** ok: ○, ng: × — what they mean is up to the user */
 export type Mark = "ok" | "ng";
-/** ランダム出題の対象 */
-export type RandomPool = "all" | "none" | "ok" | "ng";
+/** Which problems random picks from: "none" means unmarked ones */
+export type RandomPool = "all" | "none" | Mark;
 
 export type Store = {
-  status: Record<string, Mark>;
+  marks: Record<string, Mark>;
+  /** The problem opened last, to resume from */
   last: string | null;
   randomPool: RandomPool;
 };
 
-const KEY = "shogi-tesuji:v1";
+const KEY = "shogi-tesuji:v2";
 
 export function loadStore(): Store {
   try {
-    const raw = JSON.parse(localStorage.getItem(KEY) ?? "{}") as Partial<Store>;
-    return { status: raw.status ?? {}, last: raw.last ?? null, randomPool: raw.randomPool ?? "all" };
+    const saved = JSON.parse(localStorage.getItem(KEY) ?? "{}") as Partial<Store>;
+    return { marks: saved.marks ?? {}, last: saved.last ?? null, randomPool: saved.randomPool ?? "all" };
   } catch {
-    return { status: {}, last: null, randomPool: "all" };
+    return { marks: {}, last: null, randomPool: "all" };
   }
 }
 

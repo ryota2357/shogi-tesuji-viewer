@@ -1,25 +1,28 @@
-// アプリ「将棋の手筋」(macOS 版) のバンドルから問題データを抽出して JSON にする。
+// Extracts the problems from the bundle of the app 「将棋の手筋」 (macOS version) into JSON.
 //
 //   pnpm extract [path/to/fork.plist]
 //
-// 元データ（fork.plist）の Record は「平手初期配置から、ルール無視で駒を動かして問題図を作る手順」
-// ＋「解答手順」の棋譜テキストになっている。
-//   - 1〜(Index+1) 手目: 問題図を作る手順（最後の 1 手は直前の手として解説が付くことがある）
-//   - (Index+2) 手目以降: 解答手順
-//   - "counterCapturedRemovedIndex:N" があれば、N+1 手目を指した直後に後手の持ち駒を空にする
-//     （余った駒を駒箱に戻す操作）
-//   - "*" で始まる行は直前の手への解説。end 以降は開発メモなので無視する。
+// In fork.plist, each problem's Record is a kifu text that first builds the problem position by
+// moving pieces from the initial position with no regard for the rules, then plays the solution:
+//   - moves 1 to Index+1 set up the position; only the last of them can be a real move, and it is
+//     one exactly when it has a comment
+//   - moves from Index+2 on are the solution
+//   - "counterCapturedRemovedIndex:N" empties 後手's hand right after move N+1, putting the pieces
+//     left over from the setup back in the box (-1 means no such step)
+//   - a line starting with "*" comments on the preceding move, and so does a following line
+//     without "*"; everything after "end" is the developer's notes
 
 import { execFileSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { Problem, ProblemData } from "../src/problem.ts";
+import type { Problem } from "../src/problem.ts";
 import { applyMove, emptyHand, hiratePosition, type Kind, type Move, type Position } from "../src/shogi.ts";
 
 const DEFAULT_PLIST = "/Applications/将棋の手筋.app/Wrapper/Tesuji.app/fork.plist";
 const OUT = join(dirname(fileURLToPath(import.meta.url)), "../src/generated/problems.json");
 
+/** A node of fork.plist: a category when it has Fork, a problem when it has Record */
 type RawNode = { Caption: string; Title?: string; Index?: number; Record?: string; Fork?: RawNode[] };
 
 const ZEN = "１２３４５６７８９";
@@ -34,7 +37,7 @@ function parseRecord(record: string): { removedIndex: number | null; moves: Move
     const m = MOVE_RE.exec(line);
     if (m) {
       const [, num, f, r, pieceText, ff, fr, side] = m;
-      if (Number(num) !== moves.length + 1) throw new Error(`手数が連続していない: ${line}`);
+      if (Number(num) !== moves.length + 1) throw new Error(`move number out of sequence: ${line}`);
       let kind = pieceText;
       let promote = false;
       let noPromote = false;
@@ -60,33 +63,33 @@ function parseRecord(record: string): { removedIndex: number | null; moves: Move
     } else if (line.startsWith("*")) {
       moves.at(-1)?.comments.push(line.slice(1));
     } else if (line.trim() !== "") {
-      // "*" の付いていない行は直前の解説の続き
       const last = moves.at(-1)?.comments;
-      if (!last || last.length === 0) throw new Error(`解釈できない行: ${line}`);
+      if (!last || last.length === 0) throw new Error(`unexpected line: ${line}`);
       last[last.length - 1] += `\n${line}`;
     }
   }
   return { removedIndex, moves };
 }
 
-function convert(node: RawNode, path: string[]): Omit<Problem, "id"> {
+function convert(id: string, node: RawNode, path: string[]): Problem {
   const { removedIndex, moves } = parseRecord(node.Record ?? "");
   const index = node.Index ?? -1;
-  if (index < 0 || index + 1 >= moves.length) throw new Error("Index が範囲外");
+  if (index < 0 || index + 1 >= moves.length) throw new Error("Index out of range");
 
   let pos: Position = hiratePosition();
   for (let i = 0; i <= index; i++) {
-    if (i < index && moves[i].comments.length > 0) throw new Error("局面作成手順に解説がある");
+    if (i < index && moves[i].comments.length > 0) throw new Error("a setup move has a comment");
     pos = applyMove(pos, moves[i]);
-    if (removedIndex !== null && i === removedIndex) pos.hands.g = emptyHand();
+    if (i === removedIndex) pos.hands.g = emptyHand();
   }
   const last = moves[index];
   const solution = moves.slice(index + 1);
-  // 解答手順もルール無視で再生して矛盾がないことだけ確認する
+  if (solution[0].side !== "s") throw new Error("the solution starts with 後手");
+  // Replaying the solution throws if it does not fit the position.
   solution.reduce(applyMove, pos);
-  if (solution[0].side !== "s") throw new Error("解答が後手から始まっている");
 
   return {
+    id,
     title: node.Caption,
     path,
     start: pos,
@@ -100,18 +103,16 @@ const plist = process.argv[2] ?? DEFAULT_PLIST;
 const root = JSON.parse(execFileSync("plutil", ["-convert", "json", "-o", "-", plist], { encoding: "utf8", maxBuffer: 64 << 20 })) as RawNode[];
 
 const problems: Problem[] = [];
-const usedIds = new Map<string, number>();
 const walk = (nodes: RawNode[], path: string[]) => {
   for (const node of nodes) {
     if (node.Record !== undefined) {
-      const base = `${path.join("/")}:${node.Title ?? "noid"}`;
-      const n = usedIds.get(base) ?? 0;
-      usedIds.set(base, n + 1);
-      const id = n === 0 ? base : `${base}#${n + 1}`;
+      const id = `${path.join("/")}:${node.Title}`;
       try {
-        problems.push({ id, ...convert(node, path) });
+        if (node.Title === undefined) throw new Error("no Title");
+        if (problems.some((p) => p.id === id)) throw new Error("duplicate id");
+        problems.push(convert(id, node, path));
       } catch (e) {
-        throw new Error(`${path.join("/")} / ${node.Caption} (${base}): ${(e as Error).message}`);
+        throw new Error(`${id} ${node.Caption}: ${(e as Error).message}`);
       }
     }
     if (node.Fork) walk(node.Fork, [...path, node.Caption]);
@@ -119,9 +120,6 @@ const walk = (nodes: RawNode[], path: string[]) => {
 };
 walk(root, []);
 
-const data: ProblemData = { problems };
 mkdirSync(dirname(OUT), { recursive: true });
-writeFileSync(OUT, JSON.stringify(data));
-const dup = [...usedIds].filter(([, n]) => n > 1);
-console.log(`${problems.length} 問を書き出しました: ${OUT}`);
-if (dup.length > 0) console.log(`ID の重複（連番を付与）: ${dup.map(([k, n]) => `${k}×${n}`).join(", ")}`);
+writeFileSync(OUT, JSON.stringify(problems));
+console.log(`Wrote ${problems.length} problems to ${OUT}`);

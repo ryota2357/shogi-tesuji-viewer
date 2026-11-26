@@ -1,15 +1,17 @@
-// 将棋の盤面・指し手の最小限のモデル。
-// 合法手の判定は行わない（元データの局面作成手順がルール無視のため、
-// 「駒を動かす・取った駒は持ち駒になる」だけを再現する）。
+// A minimal model of shogi positions and moves.
+//
+// Legality is deliberately not checked: the source data builds each problem position by moving
+// pieces with no regard for the rules, so the model only does what that requires — move a piece,
+// and put a captured piece (even a king) into the capturer's hand.
 
-export type Side = "s" | "g"; // s: 先手, g: 後手
+export type Side = "s" | "g"; // s: 先手 (black, moves up the board), g: 後手
 
 export const HAND_KINDS = ["飛", "角", "金", "銀", "桂", "香", "歩"] as const;
 export type HandKind = (typeof HAND_KINDS)[number];
 export type PromotedKind = "と" | "成香" | "成桂" | "成銀" | "馬" | "龍";
 export type Kind = HandKind | "玉" | PromotedKind;
 
-export const PROMOTE: Partial<Record<Kind, PromotedKind>> = {
+const PROMOTE: Partial<Record<Kind, PromotedKind>> = {
   歩: "と",
   香: "成香",
   桂: "成桂",
@@ -27,25 +29,29 @@ const UNPROMOTE: Record<PromotedKind, HandKind> = {
 };
 
 export type Piece = { side: Side; kind: Kind };
-/** 筋(1-9), 段(1-9) */
+/** file (筋) and rank (段), both 1-9 */
 export type Square = { file: number; rank: number };
 
+/**
+ * Includes 玉 because the setup moves of the source data capture kings. In a problem with only one
+ * king on the board (片玉), the other king stays in a hand; it is neither shown nor exported.
+ */
 export type Hand = Record<HandKind | "玉", number>;
 export type Position = {
-  /** index = (rank-1)*9 + (9-file)。表示と同じ並び（左上が９一）。 */
+  /** Indexed by `sqIndex`: row-major as displayed, starting from ９一 at the top left. */
   board: (Piece | null)[];
   hands: Record<Side, Hand>;
 };
 
 export type Move = {
   side: Side;
-  /** null なら打つ手 */
+  /** null for a drop */
   from: Square | null;
   to: Square;
-  /** 動かす前の駒（打つ手なら打つ駒） */
+  /** The piece before the move, or the dropped piece */
   kind: Kind;
   promote: boolean;
-  /** 成れるのにあえて成らなかった（元データに「不成」と明記） */
+  /** The source data explicitly says 不成 (declined a possible promotion) */
   noPromote: boolean;
   comments: string[];
 };
@@ -53,6 +59,8 @@ export type Move = {
 export const sqIndex = (sq: Square) => (sq.rank - 1) * 9 + (9 - sq.file);
 export const sameSquare = (a: Square | null, b: Square | null) =>
   a !== null && b !== null && a.file === b.file && a.rank === b.rank;
+
+export const isPromoted = (kind: Kind) => kind in UNPROMOTE;
 
 export function emptyHand(): Hand {
   return { 飛: 0, 角: 0, 金: 0, 銀: 0, 桂: 0, 香: 0, 歩: 0, 玉: 0 };
@@ -79,63 +87,45 @@ export function hiratePosition(): Position {
   return { board, hands: { s: emptyHand(), g: emptyHand() } };
 }
 
-export function clonePosition(pos: Position): Position {
-  return {
-    board: pos.board.slice(),
-    hands: { s: { ...pos.hands.s }, g: { ...pos.hands.g } },
-  };
-}
-
-export function toHandKind(kind: Kind): HandKind | "玉" {
-  return kind in UNPROMOTE ? UNPROMOTE[kind as PromotedKind] : (kind as HandKind | "玉");
-}
-
-/** ルールを無視して指し手を適用する。矛盾があれば例外を投げる。 */
+/** Applies a move without checking legality. Throws if the move does not fit the position at all. */
 export function applyMove(pos: Position, mv: Move): Position {
-  const next = clonePosition(pos);
+  const next: Position = { board: pos.board.slice(), hands: { s: { ...pos.hands.s }, g: { ...pos.hands.g } } };
   let kind: Kind;
   if (mv.from === null) {
-    const hk = mv.kind as HandKind | "玉";
-    if (!(next.hands[mv.side][hk] > 0)) throw new Error(`持ち駒に${hk}がない`);
-    next.hands[mv.side][hk]--;
+    const dropped = mv.kind as keyof Hand;
+    if (!(next.hands[mv.side][dropped] > 0)) throw new Error(`no ${dropped} in hand`);
+    next.hands[mv.side][dropped]--;
     kind = mv.kind;
   } else {
     const src = next.board[sqIndex(mv.from)];
-    if (!src) throw new Error("移動元に駒がない");
-    if (src.side !== mv.side || src.kind !== mv.kind) throw new Error("移動元の駒が一致しない");
+    if (!src) throw new Error("no piece on the source square");
+    if (src.side !== mv.side || src.kind !== mv.kind) throw new Error("the piece on the source square differs");
     next.board[sqIndex(mv.from)] = null;
     kind = mv.promote ? (PROMOTE[src.kind] ?? src.kind) : src.kind;
   }
   const captured = next.board[sqIndex(mv.to)];
-  if (captured) next.hands[mv.side][toHandKind(captured.kind)]++;
+  if (captured) {
+    const k = captured.kind;
+    next.hands[mv.side][k in UNPROMOTE ? UNPROMOTE[k as PromotedKind] : (k as keyof Hand)]++;
+  }
   next.board[sqIndex(mv.to)] = { side: mv.side, kind };
   return next;
 }
 
-/** 成ることができる移動か（行き所のない駒の強制成りは考慮しない） */
-export function canPromote(side: Side, kind: Kind, from: Square, to: Square): boolean {
-  if (!(kind in PROMOTE)) return false;
-  const inZone = (sq: Square) => (side === "s" ? sq.rank <= 3 : sq.rank >= 7);
-  return inZone(from) || inZone(to);
-}
-
-// ---- 表記 ----
+// ---- Notation ----
 
 export const FILE_ZEN = ["", "１", "２", "３", "４", "５", "６", "７", "８", "９"];
 export const RANK_KAN = ["", "一", "二", "三", "四", "五", "六", "七", "八", "九"];
-const KAN_NUM = ["", "", "二", "三", "四", "五", "六", "七", "八", "九", "十", "十一", "十二", "十三", "十四", "十五", "十六", "十七", "十八"];
-export const kanNum = (n: number) => KAN_NUM[n] ?? String(n);
 
-export const sideMark = (side: Side) => (side === "s" ? "▲" : "△");
-
-/** 「▲７二飛打」「△同　玉」のような表記（KI2 風だが打は常に付ける） */
+/** Like "▲７二飛打" or "△同　玉": KI2 style, except that a drop always gets 打. */
 export function moveLabel(mv: Move, prev: Move | null): string {
+  const mark = mv.side === "s" ? "▲" : "△";
   const dest = prev && sameSquare(prev.to, mv.to) ? "同　" : FILE_ZEN[mv.to.file] + RANK_KAN[mv.to.rank];
   const suffix = mv.from === null ? "打" : mv.promote ? "成" : mv.noPromote ? "不成" : "";
-  return sideMark(mv.side) + dest + mv.kind + suffix;
+  return mark + dest + mv.kind + suffix;
 }
 
-/** 盤上に表示する 1 文字 */
+/** The single character drawn on the board */
 export function pieceGlyph(p: Piece): string {
   switch (p.kind) {
     case "成香":
@@ -150,5 +140,3 @@ export function pieceGlyph(p: Piece): string {
       return p.kind;
   }
 }
-
-export const isPromoted = (kind: Kind) => kind in UNPROMOTE;

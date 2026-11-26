@@ -2,5 +2,5 @@ node_modules/
 dist/
 .direnv/
 
-# アプリから抽出したデータ（著作物なのでコミットしない）
+# Extracted from the app; copyrighted, so never commit it
 src/generated/

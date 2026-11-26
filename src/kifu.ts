@@ -1,19 +1,10 @@
-// 外部アプリ（ピヨ将棋など）に渡すための書き出し。
+// Exports a problem as a game record for other apps (ぴよ将棋 etc.).
+// Both formats assume 先手 moves first, which `Problem.moves` guarantees.
 
 import type { Problem } from "./problem.ts";
-import {
-  FILE_ZEN,
-  HAND_KINDS,
-  type Hand,
-  type Kind,
-  kanNum,
-  type Move,
-  type Piece,
-  type Position,
-  RANK_KAN,
-  sameSquare,
-  sqIndex,
-} from "./shogi.ts";
+import { FILE_ZEN, HAND_KINDS, type Hand, type Kind, type Move, type Piece, type Position, RANK_KAN, sameSquare, sqIndex } from "./shogi.ts";
+
+// ---- KIF ----
 
 const BOD_GLYPH: Record<Kind, string> = {
   歩: "歩",
@@ -31,22 +22,25 @@ const BOD_GLYPH: Record<Kind, string> = {
   馬: "馬",
   龍: "龍",
 };
+// A hand holds at most 18 pieces of a kind (歩).
+const KAN_COUNT = ["", "", "二", "三", "四", "五", "六", "七", "八", "九", "十", "十一", "十二", "十三", "十四", "十五", "十六", "十七", "十八"];
 
 function kifHand(hand: Hand): string {
-  const parts = HAND_KINDS.filter((k) => hand[k] > 0).map((k) => k + (hand[k] > 1 ? kanNum(hand[k]) : ""));
+  const parts = HAND_KINDS.filter((k) => hand[k] > 0).map((k) => k + KAN_COUNT[hand[k]]);
   return parts.length > 0 ? parts.join("　") : "なし";
 }
 
 function kifMove(mv: Move, prev: Move | null): string {
   const dest = prev && sameSquare(prev.to, mv.to) ? "同　" : FILE_ZEN[mv.to.file] + RANK_KAN[mv.to.rank];
   if (mv.from === null) return `${dest}${mv.kind}打`;
-  // KIF では「不成」は書かない（移動元があるので成らないことは表せる。「不成」を読めないパーサーもある）
+  // 不成 is left out: the source square already says the piece did not promote, and some parsers
+  // (e.g. tsshogi) reject 不成 in KIF.
   return `${dest}${mv.kind}${mv.promote ? "成" : ""}(${mv.from.file}${mv.from.rank})`;
 }
 
 const commentLines = (comments: string[]) => comments.flatMap((c) => c.split("\n")).map((l) => `*${l}`);
 
-/** 局面図（BOD）付きの KIF。コメントも含む。 */
+/** KIF that starts from the problem position (a BOD board diagram) and carries the comments */
 export function toKif(p: Problem): string {
   const pos = p.start;
   const lines: string[] = [];
@@ -76,7 +70,7 @@ export function toKif(p: Problem): string {
   return `${lines.join("\r\n")}\r\n`;
 }
 
-// ---- SFEN ----
+// ---- SFEN / USI ----
 
 const SFEN_LETTER: Record<Kind, string> = {
   歩: "p",
@@ -101,7 +95,8 @@ function sfenPiece(pc: Piece): string {
   return pc.side === "s" ? s.toUpperCase() : s;
 }
 
-export function toSfen(pos: Position): string {
+/** SFEN of a position with 先手 to move */
+function toSfen(pos: Position): string {
   const rows: string[] = [];
   for (let rank = 1; rank <= 9; rank++) {
     let row = "";
@@ -134,11 +129,12 @@ function usiMove(mv: Move): string {
 }
 
 /**
- * ぴよ将棋で開くリンク。手順も含め、num 手目の局面を表示する（解説コメントは渡せない）。
- * app: true ならアプリ（iOS / Android）、false なら WEB 版の「ぴよ将棋w」。
+ * A link that opens the problem in ぴよ将棋 at the position after `step` moves, with the whole
+ * solution loaded. ぴよ将棋's link format cannot carry comments.
+ * "app" opens the iOS / Android app, "web" opens ぴよ将棋w in the browser.
  */
-export function piyoLink(p: Problem, num: number, app: boolean): string {
+export function piyoLink(p: Problem, step: number, target: "app" | "web"): string {
   const sfen = `position sfen ${toSfen(p.start)} moves ${p.moves.map(usiMove).join(" ")}`;
-  const query = `sfen=${encodeURIComponent(sfen)}&num=${num}&game_name=${encodeURIComponent(p.title)}`;
-  return app ? `piyoshogi://?${query}` : `https://www.studiok-i.net/ps/?${query}`;
+  const query = `sfen=${encodeURIComponent(sfen)}&num=${step}&game_name=${encodeURIComponent(p.title)}`;
+  return target === "app" ? `piyoshogi://?${query}` : `https://www.studiok-i.net/ps/?${query}`;
 }

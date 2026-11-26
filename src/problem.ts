@@ -1,21 +1,24 @@
 import type { Move, Position } from "./shogi.ts";
 
 export type Problem = {
-  /** localStorage のキーにも使う安定 ID（「カテゴリ:元データの Title」。重複時は連番を付与） */
+  /** Stable across extractions, so it keys the saved marks: "<category path>:<Title in the source data>" */
   id: string;
   title: string;
-  /** カテゴリの階層（例: ["双玉問題", "即詰みの手筋"]） */
+  /** Category path, e.g. ["双玉問題", "即詰みの手筋"] */
   path: string[];
-  /** 問題図 */
   start: Position;
-  /** 問題図に至った直前の手（解説が付いている場合のみ。局面作成用の手は含めない） */
+  /**
+   * The move that led to the problem position, present only when the source data comments on it.
+   * The other moves before the position only set up the board and are dropped.
+   */
   lastMove: Move | null;
-  /** 問題図の時点で表示する解説 */
+  /** Comments shown with the problem position */
   prompt: string[];
-  /** 解答手順（先手から） */
+  /** The solution. 先手 always moves first, which the exports in kifu.ts rely on. */
   moves: Move[];
 };
 
-export type ProblemData = {
-  problems: Problem[];
-};
+export const categoryOf = (p: Problem) => p.path.join(" / ");
+
+/** The move played just before the position after `step` moves of the solution */
+export const moveBefore = (p: Problem, step: number): Move | null => (step > 0 ? p.moves[step - 1] : p.lastMove);

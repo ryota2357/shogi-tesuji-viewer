@@ -1,20 +1,23 @@
 import { FILE_ZEN, HAND_KINDS, type HandKind, isPromoted, pieceGlyph, type Position, RANK_KAN, type Side, type Square, sameSquare, sqIndex } from "./shogi.ts";
 
+/** The piece picked up to move: one on the board, or one in hand to drop */
 export type Selection = { type: "square"; sq: Square } | { type: "hand"; kind: HandKind } | null;
 
 type Props = {
   pos: Position;
-  /** 直前に動いた駒の移動先・移動元 */
-  lastTo: Square | null;
+  /** The previous move, highlighted */
   lastFrom: Square | null;
+  lastTo: Square | null;
   selection: Selection;
-  /** 盤上で操作できる手番（操作できないなら null） */
+  /** The side whose pieces can be operated, or null when the board is read-only. */
   turn: Side | null;
+  /** Called only while `turn` is set */
   onSquare: (sq: Square) => void;
+  /** Called only for the hand of `turn` */
   onHand: (kind: HandKind) => void;
 };
 
-export function Board({ pos, lastTo, lastFrom, selection, turn, onSquare, onHand }: Props) {
+export function Board({ pos, lastFrom, lastTo, selection, turn, onSquare, onHand }: Props) {
   const cells = [];
   for (let rank = 1; rank <= 9; rank++) {
     for (let file = 9; file >= 1; file--) {
@@ -52,7 +55,9 @@ export function Board({ pos, lastTo, lastFrom, selection, turn, onSquare, onHand
   );
 }
 
-function HandView({ side, pos, selection, active, onHand }: { side: Side; pos: Position; selection: Selection; active: boolean; onHand: (k: HandKind) => void }) {
+type HandProps = { side: Side; pos: Position; selection: Selection; active: boolean; onHand: (k: HandKind) => void };
+
+function HandView({ side, pos, selection, active, onHand }: HandProps) {
   const hand = pos.hands[side];
   return (
     <div class={`hand hand-${side}`}>

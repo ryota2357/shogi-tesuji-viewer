@@ -10,7 +10,7 @@
   --wood: #e9c98f;
   --wood-line: #6b4f2a;
   --sidebar: 270px;
-  /* 盤のマス目。高さと（サイドバー・解説欄を除いた）幅の両方に収まる大きさ */
+  /* The size of a board square: fits both the height and the width left by the sidebar and the comments */
   --cell: min(64px, calc((100vh - 250px) / 9.6), calc((100vw - var(--sidebar) - 340px - 64px) / 9));
   font-family: "Hiragino Sans", "Hiragino Kaku Gothic ProN", system-ui, sans-serif;
   color: var(--text);
@@ -97,7 +97,7 @@ button.primary {
   font-size: 12px;
   padding: 3px 6px;
 }
-.group-head,
+.category,
 .problem {
   display: flex;
   width: 100%;
@@ -106,12 +106,12 @@ button.primary {
   border-radius: 4px;
   text-align: left;
 }
-.group-head {
+.category {
   justify-content: space-between;
   font-weight: 600;
   padding: 6px 8px;
 }
-.group-head.current {
+.category.current {
   color: var(--accent);
 }
 .problem {
@@ -219,7 +219,7 @@ h1 {
   font-variant-numeric: tabular-nums;
   font-size: 13px;
 }
-.controls .sep {
+.controls .spacer {
   flex: 1;
 }
 .controls.secondary button,
@@ -466,14 +466,14 @@ h1 {
   max-width: calc(100vw - 32px);
 }
 
-/* ---- スマホ・狭い画面 ---- */
+/* ---- Phones and other narrow screens ---- */
 
 .mobile-only {
   display: none;
 }
 
 @media (max-width: 860px) {
-  /* 画面の高さに収め、盤の下の残りを解説欄にする */
+  /* Fit the page to the screen height and give the comments the space left below the board */
   :root {
     --cell: min(52px, calc((100vw - 42px) / 9), calc((100dvh - 330px) / 10.6));
   }

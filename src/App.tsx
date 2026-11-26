@@ -1,55 +1,45 @@
-import type { ComponentChildren } from "preact";
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { Board, type Selection } from "./Board.tsx";
-import { piyoLink, toKif } from "./kif.ts";
-import type { Problem } from "./problem.ts";
-import { applyMove, type HandKind, type Move, moveLabel, type Position, type Square, sameSquare, sqIndex } from "./shogi.ts";
-import { loadStore, type Mark, type RandomPool, type Store, saveStore } from "./storage.ts";
+import { Help } from "./Help.tsx";
+import { piyoLink, toKif } from "./kifu.ts";
+import { categoryOf, moveBefore, type Problem } from "./problem.ts";
+import { applyMove, type Position, type Square, sameSquare, sqIndex } from "./shogi.ts";
+import { POOL_LABEL, Sidebar } from "./Sidebar.tsx";
+import { loadStore, type Mark, type Store, saveStore } from "./storage.ts";
+import { Transcript } from "./Transcript.tsx";
 
-const groupKey = (p: Problem) => p.path.join(" / ");
+// Phones and tablets probably have the ぴよ将棋 app; a PC opens the web version (ぴよ将棋w).
+// iPadOS reports itself as a Mac, hence the touch check.
+const PIYO_TARGET =
+  /iPhone|iPad|Android/.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent)) ? "app" : "web";
 
-/** スマホ・タブレットならアプリ版のぴよ将棋、PC なら WEB 版（ぴよ将棋w）で開く */
-const IS_MOBILE = /iPhone|iPad|Android/.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent));
-
-/** container の中だけをスクロールして要素を見せる（scrollIntoView はページ全体までスクロールしてしまうため） */
-function scrollIntoContainer(container: HTMLElement | null, selector: string, smooth: boolean) {
-  const el = container?.querySelector<HTMLElement>(selector);
-  if (!container || !el) return;
-  const c = container.getBoundingClientRect();
-  const r = el.getBoundingClientRect();
-  const delta = r.top < c.top ? r.top - c.top - 8 : r.bottom > c.bottom ? Math.min(r.bottom - c.bottom + 8, r.top - c.top - 8) : 0;
-  if (delta !== 0) container.scrollBy({ top: delta, behavior: smooth ? "smooth" : "auto" });
-}
-
-const POOL_LABEL: Record<RandomPool, string> = { all: "すべて", none: "無印", ok: "○", ng: "×" };
+const AUTO_REPLY_DELAY_MS = 450;
 
 export function App({ problems }: { problems: Problem[] }) {
   const [store, setStore] = useState<Store>(loadStore);
-  const [idx, setIdx] = useState(() => {
-    const fromHash = decodeURIComponent(location.hash.slice(1));
-    const i = problems.findIndex((p) => p.id === (fromHash || store.last));
-    return i >= 0 ? i : 0;
+  const [index, setIndex] = useState(() => {
+    const id = decodeURIComponent(location.hash.slice(1)) || store.last;
+    return Math.max(0, problems.findIndex((p) => p.id === id));
   });
   const [step, setStep] = useState(0);
   const [selection, setSelection] = useState<Selection>(null);
-  /** 盤上で指して進めた直後だけ、相手の応手を自動で指す */
+  // Set to the step at which the opponent replies automatically, right after the user plays a move on the board.
   const [autoReplyAt, setAutoReplyAt] = useState<number | null>(null);
-  const [help, setHelp] = useState(false);
-  const [drawer, setDrawer] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const toastTimer = useRef<number>(undefined);
 
-  const problem = problems[idx];
+  const problem = problems[index];
   const moves = problem.moves;
   const positions = useMemo(() => {
     const ps: Position[] = [problem.start];
-    for (const mv of problem.moves) ps.push(applyMove(ps[ps.length - 1], mv));
+    for (const mv of moves) ps.push(applyMove(ps[ps.length - 1], mv));
     return ps;
   }, [problem]);
-  const pos = positions[step];
-  const last = step > 0 ? moves[step - 1] : problem.lastMove;
   const atEnd = step === moves.length;
-  const turn = atEnd ? null : moves[step].side;
+  const last = moveBefore(problem, step);
+  const mark = store.marks[problem.id];
 
   useEffect(() => saveStore(store), [store]);
   useEffect(() => {
@@ -59,13 +49,13 @@ export function App({ problems }: { problems: Problem[] }) {
   }, [problem]);
 
   useEffect(() => {
-    if (autoReplyAt !== step || atEnd || moves[step].side !== "g") return;
+    if (autoReplyAt !== step) return;
     const t = setTimeout(() => {
       setStep(step + 1);
       setAutoReplyAt(null);
-    }, 450);
+    }, AUTO_REPLY_DELAY_MS);
     return () => clearTimeout(t);
-  }, [autoReplyAt, step, problem]);
+  }, [autoReplyAt, step]);
 
   const showToast = (text: string) => {
     setToast(text);
@@ -73,51 +63,48 @@ export function App({ problems }: { problems: Problem[] }) {
     toastTimer.current = window.setTimeout(() => setToast(null), 2000);
   };
 
-  const setMark = (mark: Mark | null) =>
+  const toggleMark = (m: Mark) =>
     setStore((s) => {
-      const status = { ...s.status };
-      if (mark) status[problem.id] = mark;
-      else delete status[problem.id];
-      return { ...s, status };
+      const marks = { ...s.marks };
+      if (marks[problem.id] === m) delete marks[problem.id];
+      else marks[problem.id] = m;
+      return { ...s, marks };
     });
-  const toggleMark = (mark: Mark) => setMark(store.status[problem.id] === mark ? null : mark);
 
-  /** 手順上の位置を移動する（盤上の入力以外はすべてこれを通す） */
-  const jump = (s: number) => {
-    setStep(Math.max(0, Math.min(moves.length, s)));
+  /** Moves to a step of the solution. Everything but playing on the board goes through here. */
+  const jump = (to: number) => {
+    setStep(Math.max(0, Math.min(moves.length, to)));
     setSelection(null);
     setAutoReplyAt(null);
   };
 
   const goTo = (i: number) => {
     if (i < 0 || i >= problems.length) return;
-    setIdx(i);
-    setStep(0);
-    setSelection(null);
-    setAutoReplyAt(null);
-    setDrawer(false);
+    setIndex(i);
+    jump(0);
+    setDrawerOpen(false);
   };
 
-  const random = () => {
+  const goToRandom = () => {
     const pool = store.randomPool;
-    const candidates = problems
-      .map((p, i) => [store.status[p.id] ?? "none", i] as const)
-      .filter(([m, i]) => i !== idx && (pool === "all" || m === pool))
-      .map(([, i]) => i);
+    const candidates = problems.flatMap((p, i) => (i !== index && (pool === "all" || (store.marks[p.id] ?? "none") === pool) ? [i] : []));
     if (candidates.length === 0) return showToast(`「${POOL_LABEL[pool]}」の問題はありません`);
     goTo(candidates[Math.floor(Math.random() * candidates.length)]);
   };
 
-  const jumpGroup = (dir: 1 | -1) => {
-    const key = groupKey(problem);
+  /** Next: the first problem of the next category. Previous: the first problem of this category, or of the previous one when already there. */
+  const goToCategory = (dir: 1 | -1) => {
+    const current = categoryOf(problem);
+    const first = problems.findIndex((p) => categoryOf(p) === current);
     if (dir === 1) {
-      const i = problems.findIndex((p, j) => j > idx && groupKey(p) !== key);
-      if (i >= 0) goTo(i);
-      return;
+      const next = problems.findIndex((p, i) => i > index && categoryOf(p) !== current);
+      if (next >= 0) goTo(next);
+    } else if (first < index) {
+      goTo(first);
+    } else if (first > 0) {
+      const previous = categoryOf(problems[first - 1]);
+      goTo(problems.findIndex((p) => categoryOf(p) === previous));
     }
-    const first = problems.findIndex((p) => groupKey(p) === key);
-    if (first < idx) return goTo(first);
-    if (first > 0) goTo(problems.findIndex((p) => groupKey(p) === groupKey(problems[first - 1])));
   };
 
   const copyKif = async () => {
@@ -125,41 +112,41 @@ export function App({ problems }: { problems: Problem[] }) {
     showToast("棋譜をコピーしました（解説付き）");
   };
 
-  // ---- 盤上の入力: 想定手順どおりなら進む ----
+  // ---- Playing on the board: a move advances the solution only when it is the next move of it ----
 
-  const tryMove = (from: Square | null, to: Square, dropKind: HandKind | null) => {
+  const tryMove = (source: NonNullable<Selection>, to: Square) => {
     setSelection(null);
-    const expected: Move = moves[step];
-    const ok = sameSquare(expected.to, to) && (from === null ? expected.from === null && expected.kind === dropKind : sameSquare(expected.from, from));
-    if (!ok) {
+    const expected = moves[step];
+    const matches =
+      sameSquare(expected.to, to) &&
+      (source.type === "square" ? sameSquare(expected.from, source.sq) : expected.from === null && expected.kind === source.kind);
+    if (!matches) {
       showToast("想定手順とは違う手です（→ で次の手を表示）");
       return;
     }
     setStep(step + 1);
-    setAutoReplyAt(expected.side === "s" ? step + 1 : null);
+    const reply = moves[step + 1];
+    setAutoReplyAt(expected.side === "s" && reply?.side === "g" ? step + 1 : null);
   };
 
+  const turn = atEnd ? null : moves[step].side;
+
   const onSquare = (sq: Square) => {
-    if (!turn) return;
-    const pc = pos.board[sqIndex(sq)];
+    const pc = positions[step].board[sqIndex(sq)];
     if (pc?.side === turn) {
       setSelection(selection?.type === "square" && sameSquare(selection.sq, sq) ? null : { type: "square", sq });
-    } else if (selection?.type === "square") {
-      tryMove(selection.sq, sq, null);
-    } else if (selection?.type === "hand" && !pc) {
-      tryMove(null, sq, selection.kind);
+    } else if (selection?.type === "square" || (selection?.type === "hand" && !pc)) {
+      tryMove(selection, sq);
     }
   };
 
-  const onHand = (kind: HandKind) => setSelection(selection?.type === "hand" && selection.kind === kind ? null : { type: "hand", kind });
-
-  // ---- キーボード ----
+  // ---- Keyboard ----
 
   const onKey = (e: KeyboardEvent) => {
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     if (e.target instanceof HTMLSelectElement) return;
-    if (help) {
-      if (e.key === "Escape" || e.key === "?") setHelp(false);
+    if (helpOpen) {
+      if (e.key === "Escape" || e.key === "?") setHelpOpen(false);
       return;
     }
     const actions: Record<string, () => void> = {
@@ -167,23 +154,23 @@ export function App({ problems }: { problems: Problem[] }) {
       l: () => jump(step + 1),
       ArrowLeft: () => jump(step - 1),
       h: () => jump(step - 1),
-      ArrowDown: () => goTo(idx + 1),
-      j: () => goTo(idx + 1),
-      ArrowUp: () => goTo(idx - 1),
-      k: () => goTo(idx - 1),
-      "]": () => jumpGroup(1),
-      "[": () => jumpGroup(-1),
+      ArrowDown: () => goTo(index + 1),
+      j: () => goTo(index + 1),
+      ArrowUp: () => goTo(index - 1),
+      k: () => goTo(index - 1),
+      "]": () => goToCategory(1),
+      "[": () => goToCategory(-1),
       Home: () => jump(0),
       g: () => jump(0),
       End: () => jump(moves.length),
       G: () => jump(moves.length),
-      " ": () => (atEnd ? goTo(idx + 1) : jump(step + 1)),
+      " ": () => (atEnd ? goTo(index + 1) : jump(step + 1)),
       o: () => toggleMark("ok"),
       x: () => toggleMark("ng"),
-      r: random,
+      r: goToRandom,
       c: () => void copyKif(),
-      "?": () => setHelp(true),
-      Escape: () => (drawer ? setDrawer(false) : setSelection(null)),
+      "?": () => setHelpOpen(true),
+      Escape: () => (drawerOpen ? setDrawerOpen(false) : setSelection(null)),
     };
     const action = actions[e.key];
     if (action) {
@@ -199,48 +186,43 @@ export function App({ problems }: { problems: Problem[] }) {
     return () => window.removeEventListener("keydown", listener);
   }, []);
 
-  const extraActions = (
+  const exportActions = (
     <>
       <button type="button" onClick={() => void copyKif()} title="解説付きの棋譜 (KIF) をコピー (c)">
         棋譜コピー
       </button>
       <a
         class="button"
-        href={piyoLink(problem, step, IS_MOBILE)}
-        target={IS_MOBILE ? undefined : "_blank"}
+        href={piyoLink(problem, step, PIYO_TARGET)}
+        target={PIYO_TARGET === "web" ? "_blank" : undefined}
         rel="noreferrer"
         title="表示中の局面をぴよ将棋で開く（解説は付きません）"
       >
-        {IS_MOBILE ? "ぴよ将棋で開く" : "ぴよ将棋wで開く"}
+        {PIYO_TARGET === "app" ? "ぴよ将棋で開く" : "ぴよ将棋wで開く"}
       </a>
     </>
   );
 
-  const mark = store.status[problem.id];
   return (
-    <div class={`app ${drawer ? "drawer-open" : ""}`}>
+    <div class={`app ${drawerOpen ? "drawer-open" : ""}`}>
       <Sidebar
         problems={problems}
-        current={idx}
+        current={index}
         store={store}
         onSelect={goTo}
-        onRandom={random}
-        onPool={(randomPool) => setStore((s) => ({ ...s, randomPool }))}
-        extra={extraActions}
+        onRandom={goToRandom}
+        onRandomPool={(randomPool) => setStore((s) => ({ ...s, randomPool }))}
+        mobileActions={exportActions}
       />
-      <div class="drawer-backdrop" onClick={() => setDrawer(false)} />
+      <div class="drawer-backdrop" onClick={() => setDrawerOpen(false)} />
       <main>
         <header class="topbar">
-          <button type="button" class="menu-button" onClick={() => setDrawer(true)} aria-label="問題一覧">
+          <button type="button" class="menu-button" onClick={() => setDrawerOpen(true)} aria-label="問題一覧">
             ☰
           </button>
           <div class="title-block">
             <div class="crumbs">
-              {problem.path.join(" / ")}
-              <span class="count">
-                {" "}
-                {idx + 1} / {problems.length}
-              </span>
+              {categoryOf(problem)}　{index + 1} / {problems.length}
             </div>
             <h1>{problem.title}</h1>
           </div>
@@ -256,7 +238,15 @@ export function App({ problems }: { problems: Problem[] }) {
 
         <div class="content">
           <section class="board-col">
-            <Board pos={pos} lastTo={last?.to ?? null} lastFrom={last?.from ?? null} selection={selection} turn={turn} onSquare={onSquare} onHand={onHand} />
+            <Board
+              pos={positions[step]}
+              lastFrom={last?.from ?? null}
+              lastTo={last?.to ?? null}
+              selection={selection}
+              turn={turn}
+              onSquare={onSquare}
+              onHand={(kind) => setSelection(selection?.type === "hand" && selection.kind === kind ? null : { type: "hand", kind })}
+            />
             <div class="controls">
               <button type="button" onClick={() => jump(0)} title="最初 (Home / g)">
                 ⏮
@@ -273,18 +263,18 @@ export function App({ problems }: { problems: Problem[] }) {
               <button type="button" onClick={() => jump(moves.length)} title="最後 (End / G)">
                 ⏭
               </button>
-              <span class="sep" />
-              <button type="button" onClick={() => goTo(idx - 1)} disabled={idx === 0} title="前の問題 (↑ / k)">
+              <span class="spacer" />
+              <button type="button" onClick={() => goTo(index - 1)} disabled={index === 0} title="前の問題 (↑ / k)">
                 ← 前
               </button>
-              <button type="button" class="primary" onClick={() => goTo(idx + 1)} disabled={idx === problems.length - 1} title="次の問題 (↓ / j、最後の局面で Space)">
+              <button type="button" class="primary" onClick={() => goTo(index + 1)} disabled={index === problems.length - 1} title="次の問題 (↓ / j、最後の局面で Space)">
                 次<span class="wide-only">の問題</span> →
               </button>
             </div>
             <div class="controls secondary desktop-only">
-              {extraActions}
-              <span class="sep" />
-              <button type="button" onClick={() => setHelp(true)} title="キーボード操作 (?)">
+              {exportActions}
+              <span class="spacer" />
+              <button type="button" onClick={() => setHelpOpen(true)} title="キーボード操作 (?)">
                 ?
               </button>
             </div>
@@ -295,158 +285,8 @@ export function App({ problems }: { problems: Problem[] }) {
           </section>
         </div>
       </main>
-      {help && <Help onClose={() => setHelp(false)} />}
+      {helpOpen && <Help onClose={() => setHelpOpen(false)} />}
       {toast && <div class="toast">{toast}</div>}
-    </div>
-  );
-}
-
-function Transcript({ problem, step, onJump }: { problem: Problem; step: number; onJump: (s: number) => void }) {
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => scrollIntoContainer(ref.current, ".entry.current", true), [step, problem]);
-  const moves = problem.moves;
-  const remaining = moves.length - step;
-  return (
-    <div class="transcript" ref={ref}>
-      <div class={`entry ${step === 0 ? "current" : ""}`} onClick={() => onJump(0)}>
-        <div class="move">
-          問題図
-          {problem.lastMove && <span class="sub">（直前の手 {moveLabel(problem.lastMove, null)}）</span>}
-        </div>
-        {problem.prompt.map((c, i) => (
-          <p key={i}>{c}</p>
-        ))}
-      </div>
-      {moves.slice(0, step).map((mv, i) => (
-        <div key={i} class={`entry ${i + 1 === step ? "current" : ""} ${mv.comments.length === 0 ? "bare" : ""}`} onClick={() => onJump(i + 1)}>
-          <div class="move">
-            <span class="num">{i + 1}</span> {moveLabel(mv, i === 0 ? problem.lastMove : moves[i - 1])}
-          </div>
-          {mv.comments.map((c, j) => (
-            <p key={j}>{c}</p>
-          ))}
-        </div>
-      ))}
-      <div class="remaining">{remaining > 0 ? `あと ${remaining} 手（→ / Space、または盤上で指して進む）` : "— 終了 —（Space で次の問題）"}</div>
-    </div>
-  );
-}
-
-type SidebarProps = {
-  problems: Problem[];
-  current: number;
-  store: Store;
-  onSelect: (i: number) => void;
-  onRandom: () => void;
-  onPool: (pool: RandomPool) => void;
-  /** スマホ表示のときだけ一覧の上に出す操作 */
-  extra: ComponentChildren;
-};
-
-function Sidebar({ problems, current, store, onSelect, onRandom, onPool, extra }: SidebarProps) {
-  const groups = useMemo(() => {
-    const gs: { key: string; items: number[] }[] = [];
-    problems.forEach((p, i) => {
-      const key = groupKey(p);
-      if (gs.at(-1)?.key !== key) gs.push({ key, items: [] });
-      gs[gs.length - 1].items.push(i);
-    });
-    return gs;
-  }, [problems]);
-  const currentKey = groupKey(problems[current]);
-  const [open, setOpen] = useState<Set<string>>(() => new Set([currentKey]));
-  useEffect(() => setOpen((o) => (o.has(currentKey) ? o : new Set(o).add(currentKey))), [currentKey]);
-  const ref = useRef<HTMLElement>(null);
-  useEffect(() => scrollIntoContainer(ref.current, ".problem.current", false), [current, open]);
-
-  const count = (m: Mark, items?: number[]) => (items ?? problems.map((_, i) => i)).filter((i) => store.status[problems[i].id] === m).length;
-  const toggle = (key: string) =>
-    setOpen((o) => {
-      const n = new Set(o);
-      if (n.has(key)) n.delete(key);
-      else n.add(key);
-      return n;
-    });
-
-  return (
-    <nav class="sidebar" ref={ref}>
-      <div class="sidebar-actions mobile-only">{extra}</div>
-      <div class="summary">
-        <span>
-          <span class="ok">○ {count("ok")}</span> <span class="ng">× {count("ng")}</span> <span class="muted">/ {problems.length}</span>
-        </span>
-        <span class="random">
-          <select value={store.randomPool} onChange={(e) => onPool(e.currentTarget.value as RandomPool)} title="ランダム出題の対象">
-            {(Object.keys(POOL_LABEL) as RandomPool[]).map((k) => (
-              <option key={k} value={k}>
-                {POOL_LABEL[k]}
-              </option>
-            ))}
-          </select>
-          <button type="button" onClick={onRandom} title="ランダムに出題 (r)">
-            ランダム
-          </button>
-        </span>
-      </div>
-      {groups.map((g) => {
-        const isOpen = open.has(g.key);
-        return (
-          <div class="group" key={g.key}>
-            <button type="button" class={`group-head ${g.key === currentKey ? "current" : ""}`} onClick={() => toggle(g.key)}>
-              <span>
-                {isOpen ? "▾" : "▸"} {g.key}
-              </span>
-              <span class="muted">
-                {count("ok", g.items)}/{g.items.length}
-              </span>
-            </button>
-            {isOpen &&
-              g.items.map((i) => {
-                const p = problems[i];
-                const m = store.status[p.id];
-                return (
-                  <button type="button" key={p.id} class={`problem ${i === current ? "current" : ""}`} onClick={() => onSelect(i)}>
-                    <span class={`mark ${m ?? ""}`}>{m === "ok" ? "○" : m === "ng" ? "×" : ""}</span>
-                    {p.title}
-                  </button>
-                );
-              })}
-          </div>
-        );
-      })}
-    </nav>
-  );
-}
-
-function Help({ onClose }: { onClose: () => void }) {
-  const rows: [string, string][] = [
-    ["→ / l, ← / h", "1 手進む / 戻る"],
-    ["Home / g, End / G", "最初 / 最後の局面へ"],
-    ["Space", "進む。最後の局面なら次の問題へ"],
-    ["↓ / j, ↑ / k", "次の問題 / 前の問題"],
-    ["] / [", "次のカテゴリ / 前のカテゴリ（カテゴリ内なら先頭へ）"],
-    ["o / x", "○ / × を付ける（もう一度押すと外す）"],
-    ["r", "ランダムに出題（対象は問題一覧の上で選択）"],
-    ["c", "棋譜をコピー（ぴよ将棋の「クリップボードから棋譜を読み込む」で解説付きで読める）"],
-    ["Esc", "選択解除・閉じる"],
-    ["?", "このヘルプ"],
-  ];
-  return (
-    <div class="overlay" onClick={onClose}>
-      <div class="help" onClick={(e) => e.stopPropagation()}>
-        <h2>キーボード操作</h2>
-        <table>
-          <tbody>
-            {rows.map(([k, v]) => (
-              <tr key={k}>
-                <th>{k}</th>
-                <td>{v}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        <p class="muted">盤上の駒（または持ち駒）をクリックしてから移動先をクリックすると、想定手順どおりの手なら局面が進み、相手の応手も自動で指されます。</p>
-      </div>
     </div>
   );
 }
