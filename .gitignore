@@ -1,0 +1,6 @@
+node_modules/
+dist/
+.direnv/
+
+# アプリから抽出したデータ（著作物なのでコミットしない）
+src/generated/

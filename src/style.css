@@ -1,0 +1,573 @@
+:root {
+  --bg: #f6f4ef;
+  --panel: #fffdf8;
+  --text: #2a2622;
+  --muted: #8a8278;
+  --line: #ddd6c8;
+  --accent: #b5562a;
+  --ok: #2f7d4f;
+  --ng: #c0392b;
+  --wood: #e9c98f;
+  --wood-line: #6b4f2a;
+  --sidebar: 270px;
+  /* 盤のマス目。高さと（サイドバー・解説欄を除いた）幅の両方に収まる大きさ */
+  --cell: min(64px, calc((100vh - 250px) / 9.6), calc((100vw - var(--sidebar) - 340px - 64px) / 9));
+  font-family: "Hiragino Sans", "Hiragino Kaku Gothic ProN", system-ui, sans-serif;
+  color: var(--text);
+  background: var(--bg);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+button,
+.button,
+select {
+  font: inherit;
+  font-size: 13px;
+  padding: 5px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--text);
+  cursor: pointer;
+  text-decoration: none;
+  white-space: nowrap;
+}
+select {
+  padding: 4px 6px;
+}
+button:hover:not(:disabled),
+.button:hover {
+  border-color: var(--muted);
+}
+button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.muted {
+  color: var(--muted);
+}
+.ok {
+  color: var(--ok);
+}
+.ng {
+  color: var(--ng);
+}
+
+.app {
+  display: grid;
+  grid-template-columns: var(--sidebar) 1fr;
+  height: 100vh;
+}
+
+/* ---- sidebar ---- */
+
+.sidebar {
+  overflow-y: auto;
+  border-right: 1px solid var(--line);
+  background: var(--panel);
+  padding: 8px 6px 40px;
+}
+.summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px 10px 8px;
+  font-size: 14px;
+}
+.random {
+  display: inline-flex;
+  gap: 4px;
+}
+.random button,
+.random select {
+  font-size: 12px;
+  padding: 3px 6px;
+}
+.group-head,
+.problem {
+  display: flex;
+  width: 100%;
+  border: none;
+  background: none;
+  border-radius: 4px;
+  text-align: left;
+}
+.group-head {
+  justify-content: space-between;
+  font-weight: 600;
+  padding: 6px 8px;
+}
+.group-head.current {
+  color: var(--accent);
+}
+.problem {
+  gap: 4px;
+  padding: 3px 8px 3px 14px;
+  font-size: 13px;
+  white-space: normal;
+}
+.problem:hover {
+  background: #f1ece2;
+}
+.problem.current {
+  background: #f3dfd2;
+  font-weight: 600;
+}
+.mark {
+  display: inline-block;
+  width: 1.2em;
+  flex-shrink: 0;
+}
+.drawer-backdrop,
+.menu-button {
+  display: none;
+}
+
+/* ---- main ---- */
+
+main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  height: 100vh;
+}
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 20px;
+  border-bottom: 1px solid var(--line);
+}
+.title-block {
+  flex: 1;
+  min-width: 0;
+}
+.crumbs {
+  font-size: 12px;
+  color: var(--muted);
+}
+h1 {
+  margin: 2px 0 0;
+  font-size: 20px;
+}
+.marks {
+  display: inline-flex;
+  gap: 6px;
+}
+.mark-button {
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  font-size: 20px;
+  line-height: 1;
+}
+.mark-button.on.ok {
+  background: var(--ok);
+  border-color: var(--ok);
+  color: #fff;
+}
+.mark-button.on.ng {
+  background: var(--ng);
+  border-color: var(--ng);
+  color: #fff;
+}
+
+.content {
+  flex: 1;
+  display: flex;
+  gap: 20px;
+  padding: 14px 20px;
+  min-height: 0;
+}
+.board-col {
+  flex-shrink: 0;
+  width: calc(var(--cell) * 9 + 24px);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.comment-col {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.controls .step {
+  min-width: 52px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  font-size: 13px;
+}
+.controls .sep {
+  flex: 1;
+}
+.controls.secondary button,
+.controls.secondary .button {
+  font-size: 12px;
+  padding: 4px 8px;
+}
+
+/* ---- board ---- */
+
+.board-wrap {
+  display: flex;
+  flex-direction: column;
+}
+.hand {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  height: calc(var(--cell) * 0.95);
+  width: calc(var(--cell) * 9 + 4px);
+}
+.hand-s {
+  flex-direction: row-reverse;
+}
+.hand-mark {
+  font-size: calc(var(--cell) * 0.42);
+  color: var(--muted);
+  width: 1.1em;
+  text-align: center;
+}
+.hand-piece {
+  position: relative;
+  width: calc(var(--cell) * 0.78);
+  height: calc(var(--cell) * 0.78);
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--wood);
+  border-color: #c9a86d;
+}
+.hand-piece:disabled {
+  opacity: 1;
+  cursor: default;
+}
+.hand-piece .piece {
+  font-size: calc(var(--cell) * 0.5);
+}
+.hand-count {
+  --size: clamp(13px, calc(var(--cell) * 0.32), 17px);
+  position: absolute;
+  right: calc(var(--size) * -0.3);
+  bottom: calc(var(--size) * -0.3);
+  min-width: var(--size);
+  height: var(--size);
+  padding: 0 3px;
+  border-radius: calc(var(--size) / 2);
+  background: var(--text);
+  color: #fff;
+  font-size: calc(var(--size) * 0.65);
+  font-weight: 600;
+  line-height: var(--size);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.hand-piece.selected {
+  outline: 3px solid var(--accent);
+}
+
+.files {
+  display: grid;
+  grid-template-columns: repeat(9, var(--cell));
+  font-size: 11px;
+  color: var(--muted);
+  text-align: center;
+  padding: 2px 0 2px 2px;
+}
+.board-row {
+  display: flex;
+}
+.ranks {
+  display: grid;
+  grid-template-rows: repeat(9, var(--cell));
+  font-size: 11px;
+  color: var(--muted);
+  align-items: center;
+  padding-left: 4px;
+}
+.board {
+  display: grid;
+  grid-template-columns: repeat(9, var(--cell));
+  grid-template-rows: repeat(9, var(--cell));
+  background: var(--wood);
+  border: 2px solid var(--wood-line);
+}
+.cell {
+  border-right: 1px solid var(--wood-line);
+  border-bottom: 1px solid var(--wood-line);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.cell:nth-child(9n) {
+  border-right: none;
+}
+.cell:nth-last-child(-n + 9) {
+  border-bottom: none;
+}
+.cell.last-from {
+  background: rgb(255 255 255 / 0.25);
+}
+.cell.last-to {
+  background: rgb(214 120 60 / 0.35);
+}
+.cell.selected {
+  box-shadow: inset 0 0 0 3px var(--accent);
+}
+.interactive .cell {
+  cursor: pointer;
+}
+.interactive .cell:hover {
+  background-color: rgb(255 255 255 / 0.35);
+}
+.piece {
+  font-family: "Hiragino Mincho ProN", "Yu Mincho", serif;
+  font-size: calc(var(--cell) * 0.62);
+  font-weight: 600;
+  line-height: 1;
+  user-select: none;
+}
+.piece.gote {
+  transform: rotate(180deg);
+}
+.piece.promoted {
+  color: #b3261e;
+}
+
+/* ---- comments ---- */
+
+.transcript {
+  flex: 1;
+  overflow-y: auto;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px;
+}
+.entry {
+  padding: 8px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  border-left: 3px solid transparent;
+}
+.entry:hover {
+  background: #f6f1e7;
+}
+.entry.bare {
+  padding-top: 3px;
+  padding-bottom: 3px;
+}
+.entry.current {
+  background: #fbeee4;
+  border-left-color: var(--accent);
+}
+.entry .move {
+  font-weight: 600;
+  font-size: 15px;
+}
+.entry .num {
+  display: inline-block;
+  min-width: 1.8em;
+  color: var(--muted);
+  font-weight: 400;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.entry .sub {
+  font-weight: 400;
+  font-size: 13px;
+  color: var(--muted);
+}
+.entry p {
+  margin: 6px 0 2px;
+  line-height: 1.75;
+  font-size: 15px;
+  white-space: pre-wrap;
+}
+.remaining {
+  padding: 10px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+/* ---- overlay ---- */
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  background: rgb(0 0 0 / 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+.help {
+  background: var(--panel);
+  border-radius: 10px;
+  padding: 20px 24px;
+  max-width: 600px;
+  max-height: 100%;
+  overflow-y: auto;
+}
+.help h2 {
+  margin-top: 0;
+  font-size: 17px;
+}
+.help th {
+  text-align: left;
+  vertical-align: top;
+  padding: 3px 16px 3px 0;
+  font-family: ui-monospace, monospace;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.help td {
+  font-size: 14px;
+}
+.help p {
+  font-size: 13px;
+  line-height: 1.6;
+}
+.toast {
+  position: fixed;
+  z-index: 40;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--text);
+  color: #fff;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  max-width: calc(100vw - 32px);
+}
+
+/* ---- スマホ・狭い画面 ---- */
+
+.mobile-only {
+  display: none;
+}
+
+@media (max-width: 860px) {
+  /* 画面の高さに収め、盤の下の残りを解説欄にする */
+  :root {
+    --cell: min(52px, calc((100vw - 42px) / 9), calc((100dvh - 330px) / 10.6));
+  }
+  .desktop-only {
+    display: none;
+  }
+  .mobile-only {
+    display: flex;
+  }
+  .app {
+    display: block;
+    height: 100dvh;
+  }
+  .sidebar {
+    position: fixed;
+    z-index: 20;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: min(320px, 85vw);
+    transform: translateX(-100%);
+    transition: transform 0.2s;
+    box-shadow: 0 0 20px rgb(0 0 0 / 0.2);
+  }
+  .drawer-open .sidebar {
+    transform: none;
+  }
+  .drawer-open .drawer-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 10;
+    background: rgb(0 0 0 / 0.3);
+  }
+  .sidebar-actions {
+    gap: 6px;
+    padding: 4px 6px 10px 8px;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 8px;
+  }
+  .menu-button {
+    display: block;
+    font-size: 18px;
+    padding: 4px 10px;
+  }
+  main {
+    height: 100dvh;
+  }
+  .topbar {
+    padding: 6px 10px;
+    gap: 8px;
+  }
+  .crumbs {
+    font-size: 11px;
+  }
+  h1 {
+    font-size: 15px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .mark-button {
+    width: 34px;
+    height: 34px;
+    font-size: 18px;
+  }
+  .content {
+    flex-direction: column;
+    padding: 6px 10px 10px;
+    gap: 8px;
+  }
+  .board-col {
+    width: auto;
+    align-items: center;
+    gap: 6px;
+  }
+  .controls {
+    width: 100%;
+    gap: 4px;
+  }
+  .controls button {
+    padding: 6px 8px;
+  }
+  .controls .step {
+    min-width: 40px;
+  }
+  .wide-only {
+    display: none;
+  }
+  .transcript {
+    padding: 4px;
+  }
+  .entry p,
+  .entry .move {
+    font-size: 14px;
+  }
+}
