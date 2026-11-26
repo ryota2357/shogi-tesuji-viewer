@@ -6,15 +6,24 @@ const KEYS: [string, string][] = [
   ["] / [", "次のカテゴリ / 前のカテゴリ（カテゴリ内なら先頭へ）"],
   ["o / x", "○ / × を付ける（もう一度押すと外す）"],
   ["r", "ランダムに出題（対象は問題一覧の上で選択）"],
-  ["c", "棋譜をコピー（ぴよ将棋の「クリップボードから棋譜を読み込む」で解説付きで読める）"],
+  [
+    "c",
+    "棋譜をコピー（ぴよ将棋の「クリップボードから棋譜を読み込む」で解説付きで読める）",
+  ],
   ["Esc", "選択解除・閉じる"],
   ["?", "このヘルプ"],
 ];
 
 export function Help({ onClose }: { onClose: () => void }) {
   return (
-    <div class="overlay" onClick={onClose}>
-      <div class="help" onClick={(e) => e.stopPropagation()}>
+    <div class="overlay">
+      <button
+        type="button"
+        class="overlay-backdrop"
+        aria-label="閉じる"
+        onClick={onClose}
+      />
+      <div class="help">
         <h2>キーボード操作</h2>
         <table>
           <tbody>
@@ -26,7 +35,9 @@ export function Help({ onClose }: { onClose: () => void }) {
             ))}
           </tbody>
         </table>
-        <p class="muted">盤上の駒（または持ち駒）をクリックしてから移動先をクリックすると、想定手順どおりの手なら局面が進み、相手の応手も自動で指されます。</p>
+        <p class="muted">
+          盤上の駒（または持ち駒）をクリックしてから移動先をクリックすると、想定手順どおりの手なら局面が進み、相手の応手も自動で指されます。
+        </p>
       </div>
     </div>
   );

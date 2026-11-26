@@ -17,19 +17,40 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Problem } from "../src/problem.ts";
-import { applyMove, emptyHand, hiratePosition, type Kind, type Move, type Position } from "../src/shogi.ts";
+import {
+  applyMove,
+  emptyHand,
+  hiratePosition,
+  type Kind,
+  type Move,
+  type Position,
+} from "../src/shogi.ts";
 
-const DEFAULT_PLIST = "/Applications/将棋の手筋.app/Wrapper/Tesuji.app/fork.plist";
-const OUT = join(dirname(fileURLToPath(import.meta.url)), "../src/generated/problems.json");
+const DEFAULT_PLIST =
+  "/Applications/将棋の手筋.app/Wrapper/Tesuji.app/fork.plist";
+const OUT = join(
+  dirname(fileURLToPath(import.meta.url)),
+  "../src/generated/problems.json",
+);
 
 /** A node of fork.plist: a category when it has Fork, a problem when it has Record */
-type RawNode = { Caption: string; Title?: string; Index?: number; Record?: string; Fork?: RawNode[] };
+type RawNode = {
+  Caption: string;
+  Title?: string;
+  Index?: number;
+  Record?: string;
+  Fork?: RawNode[];
+};
 
 const ZEN = "１２３４５６７８９";
 const KAN = "一二三四五六七八九";
-const MOVE_RE = /^(\d+) ([１-９])([一二三四五六七八九])(.+?)(?:\((\d)(\d)\)|打):(先手|後手)$/;
+const MOVE_RE =
+  /^(\d+) ([１-９])([一二三四五六七八九])(.+?)(?:\((\d)(\d)\)|打):(先手|後手)$/;
 
-function parseRecord(record: string): { removedIndex: number | null; moves: Move[] } {
+function parseRecord(record: string): {
+  removedIndex: number | null;
+  moves: Move[];
+} {
   let removedIndex: number | null = null;
   const moves: Move[] = [];
   for (const line of record.split("\n")) {
@@ -37,14 +58,19 @@ function parseRecord(record: string): { removedIndex: number | null; moves: Move
     const m = MOVE_RE.exec(line);
     if (m) {
       const [, num, f, r, pieceText, ff, fr, side] = m;
-      if (Number(num) !== moves.length + 1) throw new Error(`move number out of sequence: ${line}`);
+      if (Number(num) !== moves.length + 1)
+        throw new Error(`move number out of sequence: ${line}`);
       let kind = pieceText;
       let promote = false;
       let noPromote = false;
       if (kind.endsWith("不成")) {
         kind = kind.slice(0, -2);
         noPromote = true;
-      } else if (kind.length > 1 && kind.endsWith("成") && !kind.startsWith("成")) {
+      } else if (
+        kind.length > 1 &&
+        kind.endsWith("成") &&
+        !kind.startsWith("成")
+      ) {
         kind = kind.slice(0, -1);
         promote = true;
       }
@@ -64,7 +90,8 @@ function parseRecord(record: string): { removedIndex: number | null; moves: Move
       moves.at(-1)?.comments.push(line.slice(1));
     } else if (line.trim() !== "") {
       const last = moves.at(-1)?.comments;
-      if (!last || last.length === 0) throw new Error(`unexpected line: ${line}`);
+      if (!last || last.length === 0)
+        throw new Error(`unexpected line: ${line}`);
       last[last.length - 1] += `\n${line}`;
     }
   }
@@ -74,17 +101,20 @@ function parseRecord(record: string): { removedIndex: number | null; moves: Move
 function convert(id: string, node: RawNode, path: string[]): Problem {
   const { removedIndex, moves } = parseRecord(node.Record ?? "");
   const index = node.Index ?? -1;
-  if (index < 0 || index + 1 >= moves.length) throw new Error("Index out of range");
+  if (index < 0 || index + 1 >= moves.length)
+    throw new Error("Index out of range");
 
   let pos: Position = hiratePosition();
   for (let i = 0; i <= index; i++) {
-    if (i < index && moves[i].comments.length > 0) throw new Error("a setup move has a comment");
+    if (i < index && moves[i].comments.length > 0)
+      throw new Error("a setup move has a comment");
     pos = applyMove(pos, moves[i]);
     if (i === removedIndex) pos.hands.g = emptyHand();
   }
   const last = moves[index];
   const solution = moves.slice(index + 1);
-  if (solution[0].side !== "s") throw new Error("the solution starts with 後手");
+  if (solution[0].side !== "s")
+    throw new Error("the solution starts with 後手");
   // Replaying the solution throws if it does not fit the position.
   solution.reduce(applyMove, pos);
 
@@ -100,7 +130,12 @@ function convert(id: string, node: RawNode, path: string[]): Problem {
 }
 
 const plist = process.argv[2] ?? DEFAULT_PLIST;
-const root = JSON.parse(execFileSync("plutil", ["-convert", "json", "-o", "-", plist], { encoding: "utf8", maxBuffer: 64 << 20 })) as RawNode[];
+const root = JSON.parse(
+  execFileSync("plutil", ["-convert", "json", "-o", "-", plist], {
+    encoding: "utf8",
+    maxBuffer: 64 << 20,
+  }),
+) as RawNode[];
 
 const problems: Problem[] = [];
 const walk = (nodes: RawNode[], path: string[]) => {

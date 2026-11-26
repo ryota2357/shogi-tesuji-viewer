@@ -21,4 +21,5 @@ export type Problem = {
 export const categoryOf = (p: Problem) => p.path.join(" / ");
 
 /** The move played just before the position after `step` moves of the solution */
-export const moveBefore = (p: Problem, step: number): Move | null => (step > 0 ? p.moves[step - 1] : p.lastMove);
+export const moveBefore = (p: Problem, step: number): Move | null =>
+  step > 0 ? p.moves[step - 1] : p.lastMove;

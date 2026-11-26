@@ -16,8 +16,14 @@ const KEY = "shogi-tesuji:v2";
 
 export function loadStore(): Store {
   try {
-    const saved = JSON.parse(localStorage.getItem(KEY) ?? "{}") as Partial<Store>;
-    return { marks: saved.marks ?? {}, last: saved.last ?? null, randomPool: saved.randomPool ?? "all" };
+    const saved = JSON.parse(
+      localStorage.getItem(KEY) ?? "{}",
+    ) as Partial<Store>;
+    return {
+      marks: saved.marks ?? {},
+      last: saved.last ?? null,
+      randomPool: saved.randomPool ?? "all",
+    };
   } catch {
     return { marks: {}, last: null, randomPool: "all" };
   }

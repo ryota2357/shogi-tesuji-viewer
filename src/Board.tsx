@@ -1,7 +1,22 @@
-import { FILE_ZEN, HAND_KINDS, type HandKind, isPromoted, pieceGlyph, type Position, RANK_KAN, type Side, type Square, sameSquare, sqIndex } from "./shogi.ts";
+import {
+  FILE_ZEN,
+  HAND_KINDS,
+  type HandKind,
+  isPromoted,
+  type Position,
+  pieceGlyph,
+  RANK_KAN,
+  type Side,
+  type Square,
+  sameSquare,
+  sqIndex,
+} from "./shogi.ts";
 
 /** The piece picked up to move: one on the board, or one in hand to drop */
-export type Selection = { type: "square"; sq: Square } | { type: "hand"; kind: HandKind } | null;
+export type Selection =
+  | { type: "square"; sq: Square }
+  | { type: "hand"; kind: HandKind }
+  | null;
 
 type Props = {
   pos: Position;
@@ -17,7 +32,15 @@ type Props = {
   onHand: (kind: HandKind) => void;
 };
 
-export function Board({ pos, lastFrom, lastTo, selection, turn, onSquare, onHand }: Props) {
+export function Board({
+  pos,
+  lastFrom,
+  lastTo,
+  selection,
+  turn,
+  onSquare,
+  onHand,
+}: Props) {
   const cells = [];
   for (let rank = 1; rank <= 9; rank++) {
     for (let file = 9; file >= 1; file--) {
@@ -26,17 +49,39 @@ export function Board({ pos, lastFrom, lastTo, selection, turn, onSquare, onHand
       const cls = ["cell"];
       if (sameSquare(lastTo, sq)) cls.push("last-to");
       if (sameSquare(lastFrom, sq)) cls.push("last-from");
-      if (selection?.type === "square" && sameSquare(selection.sq, sq)) cls.push("selected");
+      if (selection?.type === "square" && sameSquare(selection.sq, sq))
+        cls.push("selected");
       cells.push(
-        <div class={cls.join(" ")} key={`${file}${rank}`} onClick={() => turn && onSquare(sq)}>
-          {pc && <span class={`piece ${pc.side === "g" ? "gote" : ""} ${isPromoted(pc.kind) ? "promoted" : ""}`}>{pieceGlyph(pc)}</span>}
-        </div>,
+        // Squares are left out of the tab order: moves are entered with a pointer, and the
+        // keyboard steps through the solution instead.
+        <button
+          type="button"
+          tabIndex={-1}
+          class={cls.join(" ")}
+          key={`${file}${rank}`}
+          disabled={!turn}
+          onClick={() => onSquare(sq)}
+        >
+          {pc && (
+            <span
+              class={`piece ${pc.side === "g" ? "gote" : ""} ${isPromoted(pc.kind) ? "promoted" : ""}`}
+            >
+              {pieceGlyph(pc)}
+            </span>
+          )}
+        </button>,
       );
     }
   }
   return (
-    <div class={`board-wrap ${turn ? "interactive" : ""}`}>
-      <HandView side="g" pos={pos} selection={selection} active={turn === "g"} onHand={onHand} />
+    <div class="board-wrap">
+      <HandView
+        side="g"
+        pos={pos}
+        selection={selection}
+        active={turn === "g"}
+        onHand={onHand}
+      />
       <div class="files">
         {[9, 8, 7, 6, 5, 4, 3, 2, 1].map((f) => (
           <span key={f}>{FILE_ZEN[f]}</span>
@@ -50,12 +95,24 @@ export function Board({ pos, lastFrom, lastTo, selection, turn, onSquare, onHand
           ))}
         </div>
       </div>
-      <HandView side="s" pos={pos} selection={selection} active={turn === "s"} onHand={onHand} />
+      <HandView
+        side="s"
+        pos={pos}
+        selection={selection}
+        active={turn === "s"}
+        onHand={onHand}
+      />
     </div>
   );
 }
 
-type HandProps = { side: Side; pos: Position; selection: Selection; active: boolean; onHand: (k: HandKind) => void };
+type HandProps = {
+  side: Side;
+  pos: Position;
+  selection: Selection;
+  active: boolean;
+  onHand: (k: HandKind) => void;
+};
 
 function HandView({ side, pos, selection, active, onHand }: HandProps) {
   const hand = pos.hands[side];

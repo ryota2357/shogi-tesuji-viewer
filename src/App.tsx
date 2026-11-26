@@ -3,15 +3,24 @@ import { Board, type Selection } from "./Board.tsx";
 import { Help } from "./Help.tsx";
 import { piyoLink, toKif } from "./kifu.ts";
 import { categoryOf, moveBefore, type Problem } from "./problem.ts";
-import { applyMove, type Position, type Square, sameSquare, sqIndex } from "./shogi.ts";
 import { POOL_LABEL, Sidebar } from "./Sidebar.tsx";
+import {
+  applyMove,
+  type Position,
+  type Square,
+  sameSquare,
+  sqIndex,
+} from "./shogi.ts";
 import { loadStore, type Mark, type Store, saveStore } from "./storage.ts";
 import { Transcript } from "./Transcript.tsx";
 
 // Phones and tablets probably have the ぴよ将棋 app; a PC opens the web version (ぴよ将棋w).
 // iPadOS reports itself as a Mac, hence the touch check.
 const PIYO_TARGET =
-  /iPhone|iPad|Android/.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent)) ? "app" : "web";
+  /iPhone|iPad|Android/.test(navigator.userAgent) ||
+  (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent))
+    ? "app"
+    : "web";
 
 const AUTO_REPLY_DELAY_MS = 450;
 
@@ -19,7 +28,10 @@ export function App({ problems }: { problems: Problem[] }) {
   const [store, setStore] = useState<Store>(loadStore);
   const [index, setIndex] = useState(() => {
     const id = decodeURIComponent(location.hash.slice(1)) || store.last;
-    return Math.max(0, problems.findIndex((p) => p.id === id));
+    return Math.max(
+      0,
+      problems.findIndex((p) => p.id === id),
+    );
   });
   const [step, setStep] = useState(0);
   const [selection, setSelection] = useState<Selection>(null);
@@ -87,8 +99,13 @@ export function App({ problems }: { problems: Problem[] }) {
 
   const goToRandom = () => {
     const pool = store.randomPool;
-    const candidates = problems.flatMap((p, i) => (i !== index && (pool === "all" || (store.marks[p.id] ?? "none") === pool) ? [i] : []));
-    if (candidates.length === 0) return showToast(`「${POOL_LABEL[pool]}」の問題はありません`);
+    const candidates = problems.flatMap((p, i) =>
+      i !== index && (pool === "all" || (store.marks[p.id] ?? "none") === pool)
+        ? [i]
+        : [],
+    );
+    if (candidates.length === 0)
+      return showToast(`「${POOL_LABEL[pool]}」の問題はありません`);
     goTo(candidates[Math.floor(Math.random() * candidates.length)]);
   };
 
@@ -97,7 +114,9 @@ export function App({ problems }: { problems: Problem[] }) {
     const current = categoryOf(problem);
     const first = problems.findIndex((p) => categoryOf(p) === current);
     if (dir === 1) {
-      const next = problems.findIndex((p, i) => i > index && categoryOf(p) !== current);
+      const next = problems.findIndex(
+        (p, i) => i > index && categoryOf(p) !== current,
+      );
       if (next >= 0) goTo(next);
     } else if (first < index) {
       goTo(first);
@@ -119,14 +138,18 @@ export function App({ problems }: { problems: Problem[] }) {
     const expected = moves[step];
     const matches =
       sameSquare(expected.to, to) &&
-      (source.type === "square" ? sameSquare(expected.from, source.sq) : expected.from === null && expected.kind === source.kind);
+      (source.type === "square"
+        ? sameSquare(expected.from, source.sq)
+        : expected.from === null && expected.kind === source.kind);
     if (!matches) {
       showToast("想定手順とは違う手です（→ で次の手を表示）");
       return;
     }
     setStep(step + 1);
     const reply = moves[step + 1];
-    setAutoReplyAt(expected.side === "s" && reply?.side === "g" ? step + 1 : null);
+    setAutoReplyAt(
+      expected.side === "s" && reply?.side === "g" ? step + 1 : null,
+    );
   };
 
   const turn = atEnd ? null : moves[step].side;
@@ -134,8 +157,15 @@ export function App({ problems }: { problems: Problem[] }) {
   const onSquare = (sq: Square) => {
     const pc = positions[step].board[sqIndex(sq)];
     if (pc?.side === turn) {
-      setSelection(selection?.type === "square" && sameSquare(selection.sq, sq) ? null : { type: "square", sq });
-    } else if (selection?.type === "square" || (selection?.type === "hand" && !pc)) {
+      setSelection(
+        selection?.type === "square" && sameSquare(selection.sq, sq)
+          ? null
+          : { type: "square", sq },
+      );
+    } else if (
+      selection?.type === "square" ||
+      (selection?.type === "hand" && !pc)
+    ) {
       tryMove(selection, sq);
     }
   };
@@ -188,7 +218,11 @@ export function App({ problems }: { problems: Problem[] }) {
 
   const exportActions = (
     <>
-      <button type="button" onClick={() => void copyKif()} title="解説付きの棋譜 (KIF) をコピー (c)">
+      <button
+        type="button"
+        onClick={() => void copyKif()}
+        title="解説付きの棋譜 (KIF) をコピー (c)"
+      >
         棋譜コピー
       </button>
       <a
@@ -214,10 +248,20 @@ export function App({ problems }: { problems: Problem[] }) {
         onRandomPool={(randomPool) => setStore((s) => ({ ...s, randomPool }))}
         mobileActions={exportActions}
       />
-      <div class="drawer-backdrop" onClick={() => setDrawerOpen(false)} />
+      <button
+        type="button"
+        class="drawer-backdrop"
+        aria-label="問題一覧を閉じる"
+        onClick={() => setDrawerOpen(false)}
+      />
       <main>
         <header class="topbar">
-          <button type="button" class="menu-button" onClick={() => setDrawerOpen(true)} aria-label="問題一覧">
+          <button
+            type="button"
+            class="menu-button"
+            onClick={() => setDrawerOpen(true)}
+            aria-label="問題一覧"
+          >
             ☰
           </button>
           <div class="title-block">
@@ -226,14 +270,24 @@ export function App({ problems }: { problems: Problem[] }) {
             </div>
             <h1>{problem.title}</h1>
           </div>
-          <div class="marks" role="group" aria-label="記録">
-            <button type="button" class={`mark-button ${mark === "ok" ? "on ok" : ""}`} onClick={() => toggleMark("ok")} title="○ を付ける (o)">
+          <fieldset class="marks" aria-label="記録">
+            <button
+              type="button"
+              class={`mark-button ${mark === "ok" ? "on ok" : ""}`}
+              onClick={() => toggleMark("ok")}
+              title="○ を付ける (o)"
+            >
               ○
             </button>
-            <button type="button" class={`mark-button ${mark === "ng" ? "on ng" : ""}`} onClick={() => toggleMark("ng")} title="× を付ける (x)">
+            <button
+              type="button"
+              class={`mark-button ${mark === "ng" ? "on ng" : ""}`}
+              onClick={() => toggleMark("ng")}
+              title="× を付ける (x)"
+            >
               ×
             </button>
-          </div>
+          </fieldset>
         </header>
 
         <div class="content">
@@ -245,36 +299,75 @@ export function App({ problems }: { problems: Problem[] }) {
               selection={selection}
               turn={turn}
               onSquare={onSquare}
-              onHand={(kind) => setSelection(selection?.type === "hand" && selection.kind === kind ? null : { type: "hand", kind })}
+              onHand={(kind) =>
+                setSelection(
+                  selection?.type === "hand" && selection.kind === kind
+                    ? null
+                    : { type: "hand", kind },
+                )
+              }
             />
             <div class="controls">
-              <button type="button" onClick={() => jump(0)} title="最初 (Home / g)">
+              <button
+                type="button"
+                onClick={() => jump(0)}
+                title="最初 (Home / g)"
+              >
                 ⏮
               </button>
-              <button type="button" onClick={() => jump(step - 1)} disabled={step === 0} title="戻る (← / h)">
+              <button
+                type="button"
+                onClick={() => jump(step - 1)}
+                disabled={step === 0}
+                title="戻る (← / h)"
+              >
                 ◀
               </button>
               <span class="step">
                 {step} / {moves.length}
               </span>
-              <button type="button" onClick={() => jump(step + 1)} disabled={atEnd} title="進む (→ / l)">
+              <button
+                type="button"
+                onClick={() => jump(step + 1)}
+                disabled={atEnd}
+                title="進む (→ / l)"
+              >
                 ▶
               </button>
-              <button type="button" onClick={() => jump(moves.length)} title="最後 (End / G)">
+              <button
+                type="button"
+                onClick={() => jump(moves.length)}
+                title="最後 (End / G)"
+              >
                 ⏭
               </button>
               <span class="spacer" />
-              <button type="button" onClick={() => goTo(index - 1)} disabled={index === 0} title="前の問題 (↑ / k)">
+              <button
+                type="button"
+                onClick={() => goTo(index - 1)}
+                disabled={index === 0}
+                title="前の問題 (↑ / k)"
+              >
                 ← 前
               </button>
-              <button type="button" class="primary" onClick={() => goTo(index + 1)} disabled={index === problems.length - 1} title="次の問題 (↓ / j、最後の局面で Space)">
+              <button
+                type="button"
+                class="primary"
+                onClick={() => goTo(index + 1)}
+                disabled={index === problems.length - 1}
+                title="次の問題 (↓ / j、最後の局面で Space)"
+              >
                 次<span class="wide-only">の問題</span> →
               </button>
             </div>
             <div class="controls secondary desktop-only">
               {exportActions}
               <span class="spacer" />
-              <button type="button" onClick={() => setHelpOpen(true)} title="キーボード操作 (?)">
+              <button
+                type="button"
+                onClick={() => setHelpOpen(true)}
+                title="キーボード操作 (?)"
+              >
                 ?
               </button>
             </div>

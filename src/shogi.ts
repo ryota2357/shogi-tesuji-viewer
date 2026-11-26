@@ -89,24 +89,31 @@ export function hiratePosition(): Position {
 
 /** Applies a move without checking legality. Throws if the move does not fit the position at all. */
 export function applyMove(pos: Position, mv: Move): Position {
-  const next: Position = { board: pos.board.slice(), hands: { s: { ...pos.hands.s }, g: { ...pos.hands.g } } };
+  const next: Position = {
+    board: pos.board.slice(),
+    hands: { s: { ...pos.hands.s }, g: { ...pos.hands.g } },
+  };
   let kind: Kind;
   if (mv.from === null) {
     const dropped = mv.kind as keyof Hand;
-    if (!(next.hands[mv.side][dropped] > 0)) throw new Error(`no ${dropped} in hand`);
+    if (!(next.hands[mv.side][dropped] > 0))
+      throw new Error(`no ${dropped} in hand`);
     next.hands[mv.side][dropped]--;
     kind = mv.kind;
   } else {
     const src = next.board[sqIndex(mv.from)];
     if (!src) throw new Error("no piece on the source square");
-    if (src.side !== mv.side || src.kind !== mv.kind) throw new Error("the piece on the source square differs");
+    if (src.side !== mv.side || src.kind !== mv.kind)
+      throw new Error("the piece on the source square differs");
     next.board[sqIndex(mv.from)] = null;
     kind = mv.promote ? (PROMOTE[src.kind] ?? src.kind) : src.kind;
   }
   const captured = next.board[sqIndex(mv.to)];
   if (captured) {
     const k = captured.kind;
-    next.hands[mv.side][k in UNPROMOTE ? UNPROMOTE[k as PromotedKind] : (k as keyof Hand)]++;
+    next.hands[mv.side][
+      k in UNPROMOTE ? UNPROMOTE[k as PromotedKind] : (k as keyof Hand)
+    ]++;
   }
   next.board[sqIndex(mv.to)] = { side: mv.side, kind };
   return next;
@@ -114,14 +121,40 @@ export function applyMove(pos: Position, mv: Move): Position {
 
 // ---- Notation ----
 
-export const FILE_ZEN = ["", "１", "２", "３", "４", "５", "６", "７", "８", "９"];
-export const RANK_KAN = ["", "一", "二", "三", "四", "五", "六", "七", "八", "九"];
+export const FILE_ZEN = [
+  "",
+  "１",
+  "２",
+  "３",
+  "４",
+  "５",
+  "６",
+  "７",
+  "８",
+  "９",
+];
+export const RANK_KAN = [
+  "",
+  "一",
+  "二",
+  "三",
+  "四",
+  "五",
+  "六",
+  "七",
+  "八",
+  "九",
+];
 
 /** Like "▲７二飛打" or "△同　玉": KI2 style, except that a drop always gets 打. */
 export function moveLabel(mv: Move, prev: Move | null): string {
   const mark = mv.side === "s" ? "▲" : "△";
-  const dest = prev && sameSquare(prev.to, mv.to) ? "同　" : FILE_ZEN[mv.to.file] + RANK_KAN[mv.to.rank];
-  const suffix = mv.from === null ? "打" : mv.promote ? "成" : mv.noPromote ? "不成" : "";
+  const dest =
+    prev && sameSquare(prev.to, mv.to)
+      ? "同　"
+      : FILE_ZEN[mv.to.file] + RANK_KAN[mv.to.rank];
+  const suffix =
+    mv.from === null ? "打" : mv.promote ? "成" : mv.noPromote ? "不成" : "";
   return mark + dest + mv.kind + suffix;
 }
 

@@ -10,6 +10,8 @@ pnpm install
 pnpm extract            # /Applications/将棋の手筋.app から src/generated/problems.json を生成
 pnpm dev                # 開発サーバ
 pnpm build              # dist/index.html（1 ファイル完結。file:// で直接開ける）
+pnpm check              # Biome（フォーマット・lint）。check:write で修正
+pnpm typecheck
 ```
 
 `src/generated/` はアプリの著作物なので `.gitignore` 済み。公開しないこと。

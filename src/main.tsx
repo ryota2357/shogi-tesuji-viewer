@@ -4,4 +4,6 @@ import problems from "./generated/problems.json";
 import type { Problem } from "./problem.ts";
 import "./style.css";
 
-render(<App problems={problems as Problem[]} />, document.getElementById("app")!);
+const root = document.getElementById("app");
+if (!root) throw new Error("index.html has no #app element");
+render(<App problems={problems as Problem[]} />, root);

@@ -2,7 +2,18 @@
 // Both formats assume 先手 moves first, which `Problem.moves` guarantees.
 
 import type { Problem } from "./problem.ts";
-import { FILE_ZEN, HAND_KINDS, type Hand, type Kind, type Move, type Piece, type Position, RANK_KAN, sameSquare, sqIndex } from "./shogi.ts";
+import {
+  FILE_ZEN,
+  HAND_KINDS,
+  type Hand,
+  type Kind,
+  type Move,
+  type Piece,
+  type Position,
+  RANK_KAN,
+  sameSquare,
+  sqIndex,
+} from "./shogi.ts";
 
 // ---- KIF ----
 
@@ -23,22 +34,48 @@ const BOD_GLYPH: Record<Kind, string> = {
   龍: "龍",
 };
 // A hand holds at most 18 pieces of a kind (歩).
-const KAN_COUNT = ["", "", "二", "三", "四", "五", "六", "七", "八", "九", "十", "十一", "十二", "十三", "十四", "十五", "十六", "十七", "十八"];
+const KAN_COUNT = [
+  "",
+  "",
+  "二",
+  "三",
+  "四",
+  "五",
+  "六",
+  "七",
+  "八",
+  "九",
+  "十",
+  "十一",
+  "十二",
+  "十三",
+  "十四",
+  "十五",
+  "十六",
+  "十七",
+  "十八",
+];
 
 function kifHand(hand: Hand): string {
-  const parts = HAND_KINDS.filter((k) => hand[k] > 0).map((k) => k + KAN_COUNT[hand[k]]);
+  const parts = HAND_KINDS.filter((k) => hand[k] > 0).map(
+    (k) => k + KAN_COUNT[hand[k]],
+  );
   return parts.length > 0 ? parts.join("　") : "なし";
 }
 
 function kifMove(mv: Move, prev: Move | null): string {
-  const dest = prev && sameSquare(prev.to, mv.to) ? "同　" : FILE_ZEN[mv.to.file] + RANK_KAN[mv.to.rank];
+  const dest =
+    prev && sameSquare(prev.to, mv.to)
+      ? "同　"
+      : FILE_ZEN[mv.to.file] + RANK_KAN[mv.to.rank];
   if (mv.from === null) return `${dest}${mv.kind}打`;
   // 不成 is left out: the source square already says the piece did not promote, and some parsers
   // (e.g. tsshogi) reject 不成 in KIF.
   return `${dest}${mv.kind}${mv.promote ? "成" : ""}(${mv.from.file}${mv.from.rank})`;
 }
 
-const commentLines = (comments: string[]) => comments.flatMap((c) => c.split("\n")).map((l) => `*${l}`);
+const commentLines = (comments: string[]) =>
+  comments.flatMap((c) => c.split("\n")).map((l) => `*${l}`);
 
 /** KIF that starts from the problem position (a BOD board diagram) and carries the comments */
 export function toKif(p: Problem): string {
@@ -64,7 +101,9 @@ export function toKif(p: Problem): string {
   lines.push("手数----指手---------消費時間--");
   lines.push(...commentLines(p.prompt));
   p.moves.forEach((mv, i) => {
-    lines.push(`${String(i + 1).padStart(4)} ${kifMove(mv, p.moves[i - 1] ?? null).padEnd(12)}( 0:00/00:00:00)`);
+    lines.push(
+      `${String(i + 1).padStart(4)} ${kifMove(mv, p.moves[i - 1] ?? null).padEnd(12)}( 0:00/00:00:00)`,
+    );
     lines.push(...commentLines(mv.comments));
   });
   return `${lines.join("\r\n")}\r\n`;
@@ -133,8 +172,14 @@ function usiMove(mv: Move): string {
  * solution loaded. ぴよ将棋's link format cannot carry comments.
  * "app" opens the iOS / Android app, "web" opens ぴよ将棋w in the browser.
  */
-export function piyoLink(p: Problem, step: number, target: "app" | "web"): string {
+export function piyoLink(
+  p: Problem,
+  step: number,
+  target: "app" | "web",
+): string {
   const sfen = `position sfen ${toSfen(p.start)} moves ${p.moves.map(usiMove).join(" ")}`;
   const query = `sfen=${encodeURIComponent(sfen)}&num=${step}&game_name=${encodeURIComponent(p.title)}`;
-  return target === "app" ? `piyoshogi://?${query}` : `https://www.studiok-i.net/ps/?${query}`;
+  return target === "app"
+    ? `piyoshogi://?${query}`
+    : `https://www.studiok-i.net/ps/?${query}`;
 }
